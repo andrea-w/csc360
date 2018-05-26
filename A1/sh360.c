@@ -1,6 +1,5 @@
 /*
  * sh360.c
- * Andrea Williams  V00511127
  * CSC 360, Summer 2018
  *
  */
@@ -33,7 +32,7 @@ int main(int argc, char *argv[]) {
         line_len = strlen(input); 
         fprintf(stdout, "echo: line was %d chars long\n", line_len);
 
-        if (strcmp(input, "impeach") == 0) {
+        if (strcmp(input, "exit") == 0) {
             exit(0);
         } 
     }
