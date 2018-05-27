@@ -46,13 +46,36 @@ char* getCommandPrompt() {
 
     while( (read = getline(&line, &len, fp)) != -1 ) {
         prompt = line;
-        prompt[strlen(prompt)-1] = 0;
+        prompt[strlen(prompt)-1] = 0;  // remove newline character
         break;   
     }
 
     fclose(fp);
     free(line);
     return prompt;
+}
+
+/*
+ * code adapted from appendix_e.c
+ */
+int tokenizeInput(char** tokens, char* input) {
+    int num_tokens = 0;
+    char *t;
+
+    t = strtok(input, " ");
+    while (t != NULL && num_tokens < MAX_NUM_ARGS) {
+        tokens[num_tokens] = t;
+        num_tokens++;
+        t = strtok(NULL, " ");
+    }
+    tokens[num_tokens] = NULL;
+
+    for (int i = 0; i < num_tokens; i++)
+    {
+        printf("%d: %s\n", i, tokens[i]); //print tokens for now
+    }
+
+    return num_tokens;
 }
 
 int main(int argc, char *argv[]) {
@@ -72,6 +95,9 @@ int main(int argc, char *argv[]) {
 
         line_len = strlen(input); 
         fprintf(stdout, "echo: line was %d chars long\n", line_len);
+
+        char *token[MAX_NUM_ARGS];
+        int num_tokens = tokenizeInput(token, input);
 
         if (strcmp(input, "exit") == 0) {
             exit(0);
