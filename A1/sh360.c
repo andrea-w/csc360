@@ -11,13 +11,35 @@
 #include <fcntl.h>
 
 /*
- * set global variables
+ * define global variables
  */
 #define MAX_NUM_ARGS 7
 #define MAX_INPUT_LINE 80
 #define MAX_LEN_PROMPT 10
 #define MAX_NUM_DIRS 10
 #define CONFIG_FILENAME "./.uvshrc"
+
+/*
+ * initialize other global variables
+ */
+int _num_dirs = 0; // number of directories listed in config file; i.e. number of entries in _dirs[]
+char _dirs[MAX_NUM_DIRS][MAX_INPUT_LINE]; // array of directories listed in config file
+
+/*
+ * reads remaining lines (other than first line) of config file
+ * to get list of directories in which binary commands are stored
+ * @param: fp = pointer to FILE CONFIG_FILENAME
+ * sets global variables _num_dirs and _dirs[]
+ */
+void getCommandDirectories(FILE * fp) {
+    while( fgets(_dirs[_num_dirs], MAX_INPUT_LINE, fp) && (_num_dirs < MAX_NUM_DIRS) ) {
+        _num_dirs++;
+    }
+    for (int i = 0; i < _num_dirs; i++)
+    {
+        printf("%d %s\n", i, _dirs[i]);
+    }
+}
 
 /*
  * reads first line of .sh360rc file to get string 
@@ -46,7 +68,11 @@ char* getCommandPrompt() {
 
     while( (read = getline(&line, &len, fp)) != -1 ) {
         prompt = line;
-        prompt[strlen(prompt)-1] = 0;  // remove newline character
+        if (prompt[strlen(prompt) - 1] == '\n')
+        {
+            prompt[strlen(prompt)-1] = 0;  // remove newline character
+        }
+        getCommandDirectories(fp);
         break;   
     }
 
@@ -55,6 +81,9 @@ char* getCommandPrompt() {
     return prompt;
 }
 
+/*
+ * break user inputted string up into tokens, delimited by space
+ */
 /*
  * code adapted from appendix_e.c
  */
