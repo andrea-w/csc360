@@ -24,6 +24,7 @@
  */
 int _num_dirs = 0; // number of directories listed in config file; i.e. number of entries in _dirs[]
 char _dirs[MAX_NUM_DIRS][MAX_INPUT_LINE]; // array of directories listed in config file
+char _binary_fullpath[MAX_INPUT_LINE]; // string with full filepath of binary command to be executed
 
 /*
  * reads remaining lines (other than first line) of config file
@@ -37,8 +38,44 @@ void getCommandDirectories(FILE * fp) {
     }
     for (int i = 0; i < _num_dirs; i++)
     {
+        if (_dirs[i][strlen(_dirs[i])-1]) {
+            _dirs[i][strlen(_dirs[i])-1] = 0; // remove newline character if it exists
+        }
         printf("%d %s\n", i, _dirs[i]);
     }
+}
+
+/*
+ * searches through directores in _dirs[] looking for binary matching
+ * @param binary_name
+ * returns 1 if successful, -1 if can't be found
+ */
+int findBinaryForCommand(char binary_name[]) {
+    // first check that binary_name is full path already
+    FILE * fp = fopen(binary_name, "r");
+    if (fp)
+    {
+        memcpy(_binary_fullpath, binary_name, strlen(binary_name) + 1);
+        fclose(fp);
+        return 1;
+    }
+
+    // if binary_name hasn't supplied full path
+    for (int i = 0; i < _num_dirs; i++)
+    {
+        char test_path[MAX_INPUT_LINE];
+        strcpy(test_path, _dirs[i]);
+        strcat(test_path, "/");
+        strcat(test_path, binary_name);
+        printf("Searching test_path %s\n", test_path);
+        fp = fopen(test_path, "r");
+        if (fp) {
+            memcpy(_binary_fullpath, test_path, strlen(test_path) + 1);
+            fclose(fp);
+            return 1;
+        }  
+    }
+    return -1;
 }
 
 /*
@@ -99,10 +136,12 @@ int tokenizeInput(char** tokens, char* input) {
     }
     tokens[num_tokens] = NULL;
 
+    /*
     for (int i = 0; i < num_tokens; i++)
     {
         printf("%d: %s\n", i, tokens[i]); //print tokens for now
     }
+    */
 
     return num_tokens;
 }
@@ -122,14 +161,19 @@ int main(int argc, char *argv[]) {
             input[strlen(input) - 1] = '\0';
         }
 
-        line_len = strlen(input); 
-        fprintf(stdout, "echo: line was %d chars long\n", line_len);
-
         char *token[MAX_NUM_ARGS];
         int num_tokens = tokenizeInput(token, input);
 
         if (strcmp(input, "exit") == 0) {
             exit(0);
-        } 
+        }
+        else {
+            if (findBinaryForCommand(token[0]) > 0) { /************** NEED BETTER WAY TO PASS BINARY NAME ************/
+                printf("Binary path: %s\n", _binary_fullpath);
+            } 
+            else {
+                fprintf(stderr, "Error: could not find location of binary %s\n", input);
+            }
+        }
     }
 }
