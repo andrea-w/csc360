@@ -41,7 +41,7 @@ void getCommandDirectories(FILE * fp) {
         if (_dirs[i][strlen(_dirs[i])-1]) {
             _dirs[i][strlen(_dirs[i])-1] = 0; // remove newline character if it exists
         }
-        printf("%d %s\n", i, _dirs[i]);
+        //printf("%d %s\n", i, _dirs[i]);
     }
 }
 
@@ -67,7 +67,6 @@ int findBinaryForCommand(char binary_name[]) {
         strcpy(test_path, _dirs[i]);
         strcat(test_path, "/");
         strcat(test_path, binary_name);
-        printf("Searching test_path %s\n", test_path);
         fp = fopen(test_path, "r");
         if (fp) {
             memcpy(_binary_fullpath, test_path, strlen(test_path) + 1);
@@ -146,6 +145,31 @@ int tokenizeInput(char** tokens, char* input) {
     return num_tokens;
 }
 
+/*
+ * spawn a child process and execute a "standard" binary command
+ * (not OR or PP)
+ */
+int exec_standard(char ** args, int num_tokens) {
+
+    char* envp[] = {0};
+    short pid;
+    if ( (pid = fork()) == 0) {
+        args[0] = _binary_fullpath;
+        args[num_tokens] = 0;
+
+        if( execve(args[0], args, envp) == -1) {
+            fprintf(stderr, "Failed to execute %s\n", args[0]);
+            exit(0);
+        }
+    }
+    else {
+        int returnCode;
+        while (pid != wait(&returnCode));
+    }
+
+    return 1;
+}
+
 int main(int argc, char *argv[]) {
     char input[MAX_INPUT_LINE];
     int  line_len;
@@ -169,7 +193,8 @@ int main(int argc, char *argv[]) {
         }
         else {
             if (findBinaryForCommand(token[0]) > 0) { /************** NEED BETTER WAY TO PASS BINARY NAME ************/
-                printf("Binary path: %s\n", _binary_fullpath);
+                //printf("Binary path: %s\n", _binary_fullpath);
+                exec_standard(token, num_tokens);
             } 
             else {
                 fprintf(stderr, "Error: could not find location of binary %s\n", input);
