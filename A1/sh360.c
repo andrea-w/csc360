@@ -25,6 +25,7 @@
 int _num_dirs = 0; // number of directories listed in config file; i.e. number of entries in _dirs[]
 char _dirs[MAX_NUM_DIRS][MAX_INPUT_LINE]; // array of directories listed in config file
 char _binary_fullpath[MAX_INPUT_LINE]; // string with full filepath of binary command to be executed
+char _prompt[MAX_LEN_PROMPT]; // string to be displayed for each command prompt
 
 /*
  * reads remaining lines (other than first line) of config file
@@ -36,7 +37,8 @@ void getCommandDirectories(FILE * fp) {
     while( fgets(_dirs[_num_dirs], MAX_INPUT_LINE, fp) && (_num_dirs < MAX_NUM_DIRS) ) {
         _num_dirs++;
     }
-    for (int i = 0; i < _num_dirs; i++)
+    int i;
+    for (i = 0; i < _num_dirs; i++)
     {
         if (_dirs[i][strlen(_dirs[i])-1]) {
             _dirs[i][strlen(_dirs[i])-1] = 0; // remove newline character if it exists
@@ -61,7 +63,8 @@ int findBinaryForCommand(char binary_name[]) {
     }
 
     // if binary_name hasn't supplied full path
-    for (int i = 0; i < _num_dirs; i++)
+    int i;
+    for (i = 0; i < _num_dirs; i++)
     {
         char test_path[MAX_INPUT_LINE];
         strcpy(test_path, _dirs[i]);
@@ -87,7 +90,7 @@ int findBinaryForCommand(char binary_name[]) {
  * and from example in 
  * http://man7.org/linux/man-pages/man3/getline.3.html
  */
-char* getCommandPrompt() {
+int getCommandPrompt() {
     FILE * fp;
     char * line = NULL;
     char * prompt = NULL;
@@ -108,13 +111,15 @@ char* getCommandPrompt() {
         {
             prompt[strlen(prompt)-1] = 0;  // remove newline character
         }
-        getCommandDirectories(fp);
         break;   
     }
+    memcpy(_prompt, prompt, strlen(prompt) + 1);
+    printf("prompt in getCommandPrompt: %s\n", _prompt);
+    getCommandDirectories(fp);
 
     fclose(fp);
     free(line);
-    return prompt;
+    return 1;
 }
 
 /*
@@ -149,6 +154,9 @@ int tokenizeInput(char** tokens, char* input) {
  * spawn a child process and execute a "standard" binary command
  * (not OR or PP)
  */
+/*
+ * code for this function adapted from example given in Ch.1 of Doeppner
+ */
 int exec_standard(char ** args, int num_tokens) {
 
     char* envp[] = {0};
@@ -174,11 +182,12 @@ int main(int argc, char *argv[]) {
     char input[MAX_INPUT_LINE];
     int  line_len;
 
-    char* commandPrompt = getCommandPrompt();
+    getCommandPrompt();
+    printf("command prompt in main: %s\n", _prompt);
 
     // infinite loop to accept user input
     for(;;) {
-        fprintf(stdout, "%s ", commandPrompt);
+        fprintf(stdout, "%s ", _prompt);
         fflush(stdout);
         fgets(input, MAX_INPUT_LINE, stdin);
         if (input[strlen(input) - 1] == '\n') {
