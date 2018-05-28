@@ -114,7 +114,6 @@ int getCommandPrompt() {
         break;   
     }
     memcpy(_prompt, prompt, strlen(prompt) + 1);
-    printf("prompt in getCommandPrompt: %s\n", _prompt);
     getCommandDirectories(fp);
 
     fclose(fp);
@@ -178,12 +177,71 @@ int exec_standard(char ** args, int num_tokens) {
     return 1;
 }
 
+/*
+ * first do input validation
+ * then manipulate tokens as needed to find filename & command (with args)
+ * then spawn child process
+ * then execute command
+ */
+/*
+ * code adapted from appendix_c.c
+ */
+int exec_or(char ** args, int num_tokens) {
+    int i;
+    for (i=0; i<num_tokens; i++) {
+        if (strcmp(args[i], "->") == 0) {
+            char* filename = args[i+1];
+            if (filename == NULL) {
+                fprintf(stderr, "Error: must specify target file for output redirection.\n" );
+                return 0;
+            }
+            int fd;
+            fd = open(filename, O_CREAT|O_RDWR|O_TRUNC, S_IRUSR|S_IWUSR);
+            if (fd == -1) {
+                fprintf(stderr, "Error: could not open file %s\n", filename);
+                return 0;
+            }
+
+            /* manipulate args as necessary to pass to execve() */
+            int j;
+            for (j=0; j<i-1; j++) {
+                args[j] = args[j+1];
+            }
+            for (j=j; j<num_tokens; j++) {
+                args[j] = 0;                
+            }
+
+
+            short pid;
+            if ( (pid = fork()) == 0) {
+                args[0] = _binary_fullpath;
+                args[num_tokens] = 0;
+                char* envp[] = {0};
+
+                dup2(fd, 1);
+                dup2(fd, 2);
+
+                if( execve(args[0], args, envp) == -1) {
+                    fprintf(stderr, "Error: failed to execute command %s\n", args[1]);
+                    return 0;
+                }
+            }
+            else {
+                int returnCode;
+                while (pid != wait(&returnCode));
+            }
+            return 1;    
+        }
+    }
+    fprintf(stderr, "Invalid command. Must include '->'\n" );
+    return 0;
+}
+
 int main(int argc, char *argv[]) {
     char input[MAX_INPUT_LINE];
     int  line_len;
 
     getCommandPrompt();
-    printf("command prompt in main: %s\n", _prompt);
 
     // infinite loop to accept user input
     for(;;) {
@@ -201,12 +259,21 @@ int main(int argc, char *argv[]) {
             exit(0);
         }
         else {
-            if (findBinaryForCommand(token[0]) > 0) { /************** NEED BETTER WAY TO PASS BINARY NAME ************/
+            if (!strcmp(token[0], "OR")) {
+                if (findBinaryForCommand(token[1]) > 0) {
+                    exec_or(token, num_tokens);
+                }
+            }
+
+            else if (findBinaryForCommand(token[0]) > 0) { /************** NEED BETTER WAY TO PASS BINARY NAME ************/
                 //printf("Binary path: %s\n", _binary_fullpath);
+                //else if (!strcmp(token[0], "PP")) {
+                   // exec_pipe(token, num_tokens);
+                //}
                 exec_standard(token, num_tokens);
             } 
             else {
-                fprintf(stderr, "Error: could not find location of binary %s\n", input);
+                fprintf(stderr, "Error: command %s not found.\n", input);
             }
         }
     }
