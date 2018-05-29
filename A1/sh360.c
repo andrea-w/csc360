@@ -132,19 +132,12 @@ int tokenizeInput(char** tokens, char* input) {
     char *t;
 
     t = strtok(input, " ");
-    while (t != NULL && num_tokens < MAX_NUM_ARGS) {
+    while (t != NULL) {
         tokens[num_tokens] = t;
         num_tokens++;
         t = strtok(NULL, " ");
     }
-    tokens[num_tokens] = NULL;
-
-    /*
-    for (int i = 0; i < num_tokens; i++)
-    {
-        printf("%d: %s\n", i, tokens[i]); //print tokens for now
-    }
-    */
+    tokens[num_tokens] = NULL;   
 
     return num_tokens;
 }
@@ -237,6 +230,83 @@ int exec_or(char ** args, int num_tokens) {
     return 0;
 }
 
+/*
+ * first do input validation
+ * then manipulate tokens as needed to break down commands
+ * then spawn child process
+ * then execute command(s)
+ */
+/*
+ * code adapted from appendix_d.c
+ */
+int exec_pipe(char ** args, int num_tokens) {
+    char* commands[3][MAX_NUM_ARGS];
+    int i;
+    int arrows_index[3];
+    int num_arrows = 0;
+
+    // do second check (probably unnecessary) that first token is "PP"
+    // if yes, remove it (no longer needed)
+    // if not, error message
+    if (strcmp(args[0], "PP") == 0)
+    {
+        for (i=0; i < num_tokens; i++) {
+            args[i] = args[i+1];
+        }
+        args[num_tokens-1] = 0;
+        --num_tokens;
+    }
+    else {
+        fprintf(stderr, "Error: input does not start with 'PP'. This is not a pipe operation.\n");
+        return 0;
+    }
+
+    // now count how many piping operations there will be
+    for (i = 0; i < num_tokens; i++) {
+        if (strcmp(args[i], "->") == 0) {
+            arrows_index[num_arrows] = i;
+            ++num_arrows;
+        }
+    }
+    if (num_arrows == 0) {
+        printf("Error: missing '->' symbol.\n");
+        return 0;
+    }
+    // now separate each command to be executed into 2D array commands[][]
+    int j = 0;
+    int k = 0;
+    int m = 0;
+    for (i=0; i < num_tokens; i++) {
+        if (i != arrows_index[j]) {
+            commands[k][m] = args[i];
+            m++;
+        }
+        else if(i == arrows_index[j]) {
+            commands[k][m] = 0;
+            m = 0;
+            j++;
+            k++;
+        }
+    }
+    commands[k][m] = 0; // null-terminate final command[]
+
+    if (k - 1 < num_arrows) {
+        fprintf(stderr, "Error: missing command.\n" );    
+    }
+
+    for(i=0; i<3; i++) {
+        printf("commands[%d]: ", i);
+        for(k=0; k<3; k++) {
+            printf(" %s ", commands[i][k]);
+        }
+        printf("\n");
+    }
+
+    // spawn child process(es) - one child for each command
+
+    return 1;
+}
+
 int main(int argc, char *argv[]) {
     char input[MAX_INPUT_LINE];
     int  line_len;
@@ -252,19 +322,29 @@ int main(int argc, char *argv[]) {
             input[strlen(input) - 1] = '\0';
         }
 
-        char *token[MAX_NUM_ARGS];
+        char *token[MAX_NUM_ARGS+2]; // +2 is to account for max possible number of '->'s included in input
         int num_tokens = tokenizeInput(token, input);
 
         if (strcmp(input, "exit") == 0) {
             exit(0);
         }
         else {
-            if (!strcmp(token[0], "OR")) {
+            if (strcmp(token[0], "OR") == 0) {
                 if (findBinaryForCommand(token[1]) > 0) {
                     exec_or(token, num_tokens);
                 }
+                else {
+                    fprintf(stderr, "Error: command '%s' not found.\n", token[1]);
+                }
             }
-
+            else if (strcmp(token[0], "PP") == 0) {
+                if (findBinaryForCommand(token[1]) > 0) {
+                    exec_pipe(token, num_tokens);
+                }
+                else {
+                    fprintf(stderr, "Error: command '%s' not found.\n", token[1]);
+                }
+            }
             else if (findBinaryForCommand(token[0]) > 0) { /************** NEED BETTER WAY TO PASS BINARY NAME ************/
                 //printf("Binary path: %s\n", _binary_fullpath);
                 //else if (!strcmp(token[0], "PP")) {
@@ -273,7 +353,7 @@ int main(int argc, char *argv[]) {
                 exec_standard(token, num_tokens);
             } 
             else {
-                fprintf(stderr, "Error: command %s not found.\n", input);
+                fprintf(stderr, "Error: command '%s' not found.\n", input);
             }
         }
     }
