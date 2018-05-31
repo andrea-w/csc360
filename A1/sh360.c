@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <fcntl.h>
+#include <stdbool.h>
 
 /*
  * define global variables
@@ -18,13 +19,13 @@
 #define MAX_LEN_PROMPT 10
 #define MAX_NUM_DIRS 10
 #define CONFIG_FILENAME "./.uvshrc"
+#define MAX_LEN_DIR_NAME 200 //chosen arbitrarily
 
 /*
  * initialize other global variables
  */
 int _num_dirs = 0; // number of directories listed in config file; i.e. number of entries in _dirs[]
-char _dirs[MAX_NUM_DIRS][MAX_INPUT_LINE]; // array of directories listed in config file
-char _binary_fullpath[MAX_INPUT_LINE]; // string with full filepath of binary command to be executed
+char _dirs[MAX_NUM_DIRS][MAX_LEN_DIR_NAME]; // array of directories listed in config file
 char _prompt[MAX_LEN_PROMPT]; // string to be displayed for each command prompt
 
 /*
@@ -34,7 +35,7 @@ char _prompt[MAX_LEN_PROMPT]; // string to be displayed for each command prompt
  * sets global variables _num_dirs and _dirs[]
  */
 void getCommandDirectories(FILE * fp) {
-    while( fgets(_dirs[_num_dirs], MAX_INPUT_LINE, fp) && (_num_dirs < MAX_NUM_DIRS) ) {
+    while( fgets(_dirs[_num_dirs], MAX_LEN_DIR_NAME, fp) && (_num_dirs < MAX_NUM_DIRS) ) {
         _num_dirs++;
     }
     int i;
@@ -52,32 +53,44 @@ void getCommandDirectories(FILE * fp) {
  * @param binary_name
  * returns 1 if successful, -1 if can't be found
  */
-int findBinaryForCommand(char binary_name[]) {
+char* findBinaryForCommand(char* binary_name) {
     // first check that binary_name is full path already
+    printf("binary_name: %s\n", binary_name);
+    char* binary_fullpath;
     FILE * fp = fopen(binary_name, "r");
     if (fp)
     {
-        memcpy(_binary_fullpath, binary_name, strlen(binary_name) + 1);
+        memcpy(binary_fullpath, binary_name, strlen(binary_name) + 1);
         fclose(fp);
-        return 1;
+        return binary_fullpath;
     }
 
     // if binary_name hasn't supplied full path
     int i;
+    char test_path[MAX_LEN_DIR_NAME];
     for (i = 0; i < _num_dirs; i++)
     {
-        char test_path[MAX_INPUT_LINE];
-        strcpy(test_path, _dirs[i]);
+        printf("Am i here?\n");
+        test_path[0] = '\0';
+        strcat(test_path, _dirs[i]);
         strcat(test_path, "/");
         strcat(test_path, binary_name);
+        strcat(test_path, "\0");
+        printf("Searching %s\n", test_path);
+
         fp = fopen(test_path, "r");
         if (fp) {
-            memcpy(_binary_fullpath, test_path, strlen(test_path) + 1);
+            printf("Found it!\n");
+            //memcpy(binary_fullpath, test_path, strlen(test_path) + 1);
+            //strcat(binary_fullpath, test_path);
+            //strcat(binary_fullpath, "\0");
+            binary_fullpath = test_path;
+            printf("%s\n", binary_fullpath);
             fclose(fp);
-            return 1;
+            return binary_fullpath;
         }  
     }
-    return -1;
+    return NULL;
 }
 
 /*
@@ -149,12 +162,12 @@ int tokenizeInput(char** tokens, char* input) {
 /*
  * code for this function adapted from example given in Ch.1 of Doeppner
  */
-int exec_standard(char ** args, int num_tokens) {
+int exec_standard(char ** args, int num_tokens, char *binary_fullpath) {
 
     char* envp[] = {0};
     short pid;
     if ( (pid = fork()) == 0) {
-        args[0] = _binary_fullpath;
+        args[0] = binary_fullpath;
         args[num_tokens] = 0;
 
         if( execve(args[0], args, envp) == -1) {
@@ -179,7 +192,8 @@ int exec_standard(char ** args, int num_tokens) {
 /*
  * code adapted from appendix_c.c
  */
-int exec_or(char ** args, int num_tokens) {
+
+int exec_or(char ** args, int num_tokens, char* binary_fullpath) {
     int i;
     for (i=0; i<num_tokens; i++) {
         if (strcmp(args[i], "->") == 0) {
@@ -195,7 +209,7 @@ int exec_or(char ** args, int num_tokens) {
                 return 0;
             }
 
-            /* manipulate args as necessary to pass to execve() */
+            // manipulate args as necessary to pass to execve() 
             int j;
             for (j=0; j<i-1; j++) {
                 args[j] = args[j+1];
@@ -207,7 +221,7 @@ int exec_or(char ** args, int num_tokens) {
 
             short pid;
             if ( (pid = fork()) == 0) {
-                args[0] = _binary_fullpath;
+                args[0] = binary_fullpath;
                 args[num_tokens] = 0;
                 char* envp[] = {0};
 
@@ -230,6 +244,7 @@ int exec_or(char ** args, int num_tokens) {
     return 0;
 }
 
+
 /*
  * first do input validation
  * then manipulate tokens as needed to break down commands
@@ -239,73 +254,172 @@ int exec_or(char ** args, int num_tokens) {
 /*
  * code adapted from appendix_d.c
  */
-int exec_pipe(char ** args, int num_tokens) {
-    char* commands[3][MAX_NUM_ARGS];
-    int i;
+//int exec_pipe(char *** commands, int num_arrows, char* binary_fullpath) {
+int exec_pipe() {
+    // spawn child process(es) - one child for each command
+    int status;
+    int fd1[2];
+    int pid_1, pid_2;
+    char* envp[] = {0};
+    char* command[2][2];
+
+    // if (num_arrows == 2) {
+    //     int fd2[2];
+    //     int pid_3;
+    //     //char *cmd_3[] = {commands[2]};
+    // }
+
+    pipe(fd1);
+
+    if((pid_1 = fork()) == 0) {
+        dup2(fd1[1], 1);
+        close(fd1[0]);
+        //commands[0][0] = *binary_fullpath;
+        command[0][0] = "/bin/ls";
+        command[0][1] = "-l";
+        if (execve(command[0][0], command[0], envp) == -1) {
+            fprintf(stderr, "Error: failed to execute %s\n", command[0][0]);
+        } 
+        else printf("Executed %s %s\n", command[0][0], command[0][1]);   
+    }
+    if ((pid_2 = fork()) == 0) {
+        dup2(fd1[0], 0);
+        close(fd1[1]);
+        //commands[1][0] = *binary_fullpath;
+        command[1][0] = "/usr/bin/wc";
+        command[1][1] = "-l";
+        if (execve(command[1][0], command[1], envp) == -1) {
+            fprintf(stderr, "Error: failed to execute %s\n", command[1][0]);
+        }
+        else printf("Executed %s %s\n", command[1][0], command[1][1]);   
+    }
+
+    close(fd1[0]);
+    close(fd1[1]);
+
+    waitpid(pid_1, &status, 0);
+    waitpid(pid_2, &status, 0);
+
+    return 1;
+}   
+
+int do_command_voodoo(char* token[], int num_tokens, char* binary_fullpaths[3], char* commands[][MAX_NUM_ARGS+1]) {
     int arrows_index[3];
     int num_arrows = 0;
+    //char* commands[3][MAX_NUM_ARGS + 1];
+    //char binary_fullpaths[3][MAX_LEN_DIR_NAME];
+    int i;
 
-    // do second check (probably unnecessary) that first token is "PP"
-    // if yes, remove it (no longer needed)
-    // if not, error message
-    if (strcmp(args[0], "PP") == 0)
-    {
-        for (i=0; i < num_tokens; i++) {
-            args[i] = args[i+1];
-        }
-        args[num_tokens-1] = 0;
-        --num_tokens;
+    // remove 'PP' - shift all tokens 1 left
+    for (i=0; i < num_tokens; i++) {
+        token[i] = token[i+1];
     }
-    else {
-        fprintf(stderr, "Error: input does not start with 'PP'. This is not a pipe operation.\n");
-        return 0;
-    }
+    token[num_tokens-1] = 0;
+    --num_tokens;
 
     // now count how many piping operations there will be
     for (i = 0; i < num_tokens; i++) {
-        if (strcmp(args[i], "->") == 0) {
+        if (strcmp(token[i], "->") == 0) {
             arrows_index[num_arrows] = i;
+            printf("arrows_index[%d]: %d\n", num_arrows, arrows_index[num_arrows] );
             ++num_arrows;
         }
     }
     if (num_arrows == 0) {
-        printf("Error: missing '->' symbol.\n");
+        fprintf(stderr, "Error: missing '->' symbol.\n");
         return 0;
     }
+
     // now separate each command to be executed into 2D array commands[][]
     int j = 0;
-    int k = 0;
+    int num_cmds = 0;
     int m = 0;
     for (i=0; i < num_tokens; i++) {
         if (i != arrows_index[j]) {
-            commands[k][m] = args[i];
+            commands[num_cmds][m] = token[i];
             m++;
         }
         else if(i == arrows_index[j]) {
-            commands[k][m] = 0;
+            commands[num_cmds][m] = 0;
             m = 0;
             j++;
-            k++;
+            num_cmds++;
         }
     }
-    commands[k][m] = 0; // null-terminate final command[]
+    num_cmds++;
+    printf("num_cmds: %d\n", num_cmds);
+    commands[num_cmds-1][m] = 0; // null-terminate final command[]
 
-    if (k - 1 < num_arrows) {
-        fprintf(stderr, "Error: missing command.\n" );    
+    if (num_cmds <= num_arrows) {
+        fprintf(stderr, "Error: missing command.\n" );   /******* THIS ISN'T REACHED WHEN IT SHOULD BE ******/
+        return 0;    
     }
 
     for(i=0; i<3; i++) {
         printf("commands[%d]: ", i);
+        int k;
         for(k=0; k<3; k++) {
             printf(" %s ", commands[i][k]);
         }
         printf("\n");
     }
 
-    // spawn child process(es) - one child for each command
+    for (i=0; i < num_cmds; i++) {
+        char* binary_fullpath = findBinaryForCommand(commands[i][0]);
+        if (binary_fullpath == NULL) {
+            fprintf(stderr, "Error: command '%s' not found.\n", commands[i][0]);
+            return 0;
+        }
+        else {
+            printf("binary_fullpath: %s\n", binary_fullpath);
+            binary_fullpath[i] = *binary_fullpath;
+            printf("i: %d - %s\n", i, binary_fullpaths[i]);
+        }
+    }
 
     return 1;
 }
+
+void run_command(char* token[], int num_tokens) {
+    if (strcmp(token[0], "OR") == 0) {
+        char binary_fullpath[MAX_LEN_DIR_NAME];
+        memcpy(binary_fullpath, findBinaryForCommand(token[1]), strlen(findBinaryForCommand(token[1])) + 1);
+        if (strlen(binary_fullpath) > 0) {
+            exec_or(token, num_tokens, binary_fullpath);
+        }
+        else {
+            fprintf(stderr, "Error: command '%s' not found.\n", token[1]);
+        }
+    }
+    else if (strcmp(token[0], "PP") == 0) {
+        exec_pipe();
+        /*
+        char* commands[3][MAX_NUM_ARGS+1];
+        char* binary_fullpaths[] = {0, 0, 0};
+        if (do_command_voodoo(token, num_tokens, binary_fullpaths, commands)) {
+            for (int i = 0; i < 3; i++)
+            {
+                printf("commands[%d][0]: %s\n", i, commands[i][0]);
+                printf("binary_fullpaths[%d]: %s\n", i, binary_fullpaths[i]);
+            }
+            //exec_pipe(commands, );
+        }
+        else {
+            fprintf(stderr, "Error: could not parse input.\n");
+        }
+        */
+    }
+    else {
+        char binary_fullpath[MAX_LEN_DIR_NAME];
+        memcpy(binary_fullpath, findBinaryForCommand(token[0]), strlen(findBinaryForCommand(token[0])) + 1);
+        if (strlen(binary_fullpath) > 0) { 
+            exec_standard(token, num_tokens, binary_fullpath);
+        }
+        else {
+            fprintf(stderr, "Error: command '%s' not found.\n", token[0]);
+        }
+    } 
+} 
 
 int main(int argc, char *argv[]) {
     char input[MAX_INPUT_LINE];
@@ -322,39 +436,14 @@ int main(int argc, char *argv[]) {
             input[strlen(input) - 1] = '\0';
         }
 
-        char *token[MAX_NUM_ARGS+2]; // +2 is to account for max possible number of '->'s included in input
-        int num_tokens = tokenizeInput(token, input);
-
         if (strcmp(input, "exit") == 0) {
+            printf("Exiting...\n");
             exit(0);
         }
-        else {
-            if (strcmp(token[0], "OR") == 0) {
-                if (findBinaryForCommand(token[1]) > 0) {
-                    exec_or(token, num_tokens);
-                }
-                else {
-                    fprintf(stderr, "Error: command '%s' not found.\n", token[1]);
-                }
-            }
-            else if (strcmp(token[0], "PP") == 0) {
-                if (findBinaryForCommand(token[1]) > 0) {
-                    exec_pipe(token, num_tokens);
-                }
-                else {
-                    fprintf(stderr, "Error: command '%s' not found.\n", token[1]);
-                }
-            }
-            else if (findBinaryForCommand(token[0]) > 0) { /************** NEED BETTER WAY TO PASS BINARY NAME ************/
-                //printf("Binary path: %s\n", _binary_fullpath);
-                //else if (!strcmp(token[0], "PP")) {
-                   // exec_pipe(token, num_tokens);
-                //}
-                exec_standard(token, num_tokens);
-            } 
-            else {
-                fprintf(stderr, "Error: command '%s' not found.\n", input);
-            }
-        }
+
+        char *token[30]; // 30 is approx. max number of tokens that could be input at once
+        int num_tokens = tokenizeInput(token, input);
+
+        run_command(token, num_tokens);   
     }
 }
