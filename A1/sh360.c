@@ -56,7 +56,7 @@ void getCommandDirectories(FILE * fp) {
 char* findBinaryForCommand(char* binary_name) {
     // first check that binary_name is full path already
     printf("binary_name: %s\n", binary_name);
-    char* binary_fullpath;
+    char* binary_fullpath = "\0";
     FILE * fp = fopen(binary_name, "r");
     if (fp)
     {
@@ -261,37 +261,33 @@ int exec_pipe() {
     int fd1[2];
     int pid_1, pid_2;
     char* envp[] = {0};
-    char* command[2][2];
-
+    char* command_head[] ={"/bin/ls", "-1", 0};
+    char* command_tail[] = {"/usr/bin/wc", "-l", 0};
+    printf("I am in exec_pipe\n");
     // if (num_arrows == 2) {
     //     int fd2[2];
     //     int pid_3;
     //     //char *cmd_3[] = {commands[2]};
     // }
-
     pipe(fd1);
 
     if((pid_1 = fork()) == 0) {
+        printf("In 1\n");
         dup2(fd1[1], 1);
         close(fd1[0]);
         //commands[0][0] = *binary_fullpath;
-        command[0][0] = "/bin/ls";
-        command[0][1] = "-l";
-        if (execve(command[0][0], command[0], envp) == -1) {
-            fprintf(stderr, "Error: failed to execute %s\n", command[0][0]);
+        if (execve(command_head[0], command_head, envp) == -1) {
+            fprintf(stderr, "Error: failed to execute %s\n", command_head);
         } 
-        else printf("Executed %s %s\n", command[0][0], command[0][1]);   
     }
     if ((pid_2 = fork()) == 0) {
+	printf("In 2\n");
         dup2(fd1[0], 0);
         close(fd1[1]);
         //commands[1][0] = *binary_fullpath;
-        command[1][0] = "/usr/bin/wc";
-        command[1][1] = "-l";
-        if (execve(command[1][0], command[1], envp) == -1) {
-            fprintf(stderr, "Error: failed to execute %s\n", command[1][0]);
+        if (execve(command_tail[0], command_tail, envp) == -1) {
+            fprintf(stderr, "Error: failed to execute %s\n", command_tail);
         }
-        else printf("Executed %s %s\n", command[1][0], command[1][1]);   
     }
 
     close(fd1[0]);
@@ -299,6 +295,8 @@ int exec_pipe() {
 
     waitpid(pid_1, &status, 0);
     waitpid(pid_2, &status, 0);
+
+    printf("Yeehaw!\n");
 
     return 1;
 }   
@@ -392,6 +390,7 @@ void run_command(char* token[], int num_tokens) {
         }
     }
     else if (strcmp(token[0], "PP") == 0) {
+        printf("I am in here.\n");
         exec_pipe();
         /*
         char* commands[3][MAX_NUM_ARGS+1];
