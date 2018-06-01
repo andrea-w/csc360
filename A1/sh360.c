@@ -58,6 +58,9 @@ void getCommandDirectories(FILE * fp) {
  * https://stackoverflow.com/questions/1496313/returning-c-string-from-a-function
  */
 int findBinaryForCommand(char* binary_name, char* binary_fullpath, int buffersize) {
+    printf("binary_name: %s\n", binary_name);
+    printf("binary_fullpath: %s\n", binary_fullpath);
+    printf("buffersize: %d\n", buffersize);
     // first check that binary_name is full path already
     FILE * fp = fopen(binary_name, "r");
     if (fp)
@@ -299,14 +302,23 @@ int exec_pipe() {
     waitpid(pid_2, &status, 0);
 
     return 1;
-}   
+} 
 
-int do_command_voodoo(char* token[], int num_tokens, char* binary_fullpaths[3], char* commands[][MAX_NUM_ARGS+1]) {
-    int arrows_index[3];
+int count_arrows(char* token[], int num_tokens) {
     int num_arrows = 0;
-    //char* commands[3][MAX_NUM_ARGS + 1];
-    //char binary_fullpaths[3][MAX_LEN_DIR_NAME];
     int i;
+    for (i=0; i < num_tokens; i++) {
+        if (strcmp(token[i], "->") == 0) {
+            num_arrows++;
+        }
+    }
+    return num_arrows;
+}  
+
+int do_command_voodoo(char* token[], int num_tokens, char* commands[][MAX_NUM_ARGS+1], int num_arrows) {
+    int arrows_index[num_arrows+1];
+    int i;
+    int a;
 
     // remove 'PP' - shift all tokens 1 left
     for (i=0; i < num_tokens; i++) {
@@ -315,19 +327,33 @@ int do_command_voodoo(char* token[], int num_tokens, char* binary_fullpaths[3], 
     token[num_tokens-1] = 0;
     --num_tokens;
 
-    // now count how many piping operations there will be
+    // collect indices of endpoint for each command
+    a = 0;
     for (i = 0; i < num_tokens; i++) {
         if (strcmp(token[i], "->") == 0) {
-            arrows_index[num_arrows] = i;
-            ++num_arrows;
+            arrows_index[a] = i;
+            a++;
         }
     }
-    if (num_arrows == 0) {
-        fprintf(stderr, "Error: missing '->' symbol.\n");
-        return 0;
+    arrows_index[num_arrows] = num_tokens;
+
+    int j;
+    int k;
+    i = 0;
+    for (j=0; j < num_arrows+1; j++) {
+        k = 0;
+        while (i < arrows_index[j]) {
+            //strncpy(commands[j][k], token[i], strlen(token[i]));
+            commands[j][k] = token[i];
+            i++;
+            k++;
+        }
+        commands[j][k] = '\0';
+        i++;
     }
 
-    // now separate each command to be executed into 2D array commands[][]
+    /*
+    // now separate each command to be executed into array commands[]
     int j = 0;
     int num_cmds = 0;
     int m = 0;
@@ -345,12 +371,10 @@ int do_command_voodoo(char* token[], int num_tokens, char* binary_fullpaths[3], 
     }
     num_cmds++;
     commands[num_cmds-1][m] = 0; // null-terminate final command[]
+    */
 
-    if (num_cmds <= num_arrows) {
-        fprintf(stderr, "Error: missing command.\n" );   /******* THIS ISN'T REACHED WHEN IT SHOULD BE ******/
-        return 0;    
-    }
     /*
+    printf("In voodoo: \n");
     for(i=0; i<3; i++) {
         printf("commands[%d]: ", i);
         int k;
@@ -360,7 +384,9 @@ int do_command_voodoo(char* token[], int num_tokens, char* binary_fullpaths[3], 
         printf("\n");
     }
     */
+    
 
+    /*
     for (i=0; i < num_cmds; i++) {
         char binary_fullpath[MAX_LEN_DIR_NAME];
         findBinaryForCommand(commands[i][0], binary_fullpath, sizeof(binary_fullpath));
@@ -374,6 +400,7 @@ int do_command_voodoo(char* token[], int num_tokens, char* binary_fullpaths[3], 
             printf("i: %d - %s\n", i, binary_fullpaths[i]);
         }
     }
+    */
 
     return 1;
 }
@@ -381,7 +408,6 @@ int do_command_voodoo(char* token[], int num_tokens, char* binary_fullpaths[3], 
 void run_command(char* token[], int num_tokens) {
     if (strcmp(token[0], "OR") == 0) {
         char binary_fullpath[MAX_LEN_DIR_NAME];
-        //memcpy(binary_fullpath, findBinaryForCommand(token[1]), strlen(findBinaryForCommand(token[1])) + 1);
         findBinaryForCommand(token[1], binary_fullpath, sizeof(binary_fullpath));
         if (strlen(binary_fullpath) > 0) {
             exec_or(token, num_tokens, binary_fullpath);
@@ -391,7 +417,33 @@ void run_command(char* token[], int num_tokens) {
         }
     }
     else if (strcmp(token[0], "PP") == 0) {
-        exec_pipe();
+        int num_arrows = count_arrows(token, num_tokens);
+        if (num_arrows == 0) {
+            fprintf(stderr, "Error: missing '->' symbol.\n");
+        }
+
+        char* commands[num_arrows+1][MAX_NUM_ARGS+1];
+        do_command_voodoo(token, num_tokens, commands, num_arrows);
+        
+        printf("In run_command\n");
+        int i;
+        for(i=0; i<3; i++) {
+            printf("commands[%d]: ", i);
+            int k;
+            for(k=0; k<3; k++) {
+                printf(" %s ", commands[i][k]);
+            }
+            printf("\n");
+        }
+
+        for (i=0; i<num_arrows+1; i++) {
+            char binary_fullpath[MAX_LEN_DIR_NAME];
+            printf("before - commands[%d][0]: %s\n", i, commands[i][0] );
+            findBinaryForCommand(commands[i][0], binary_fullpath, sizeof(binary_fullpath));
+            strncpy(commands[i][0], binary_fullpath, sizeof(binary_fullpath));
+            printf("commands[%d][0]: %s\n", i, commands[i][0]);
+        }
+        //exec_pipe();
         /*
         char* commands[3][MAX_NUM_ARGS+1];
         char* binary_fullpaths[] = {0, 0, 0};
