@@ -51,18 +51,22 @@ void getCommandDirectories(FILE * fp) {
 /*
  * searches through directores in _dirs[] looking for binary matching
  * @param binary_name
- * returns 1 if successful, -1 if can't be found
+ * returns 1 if successful, 0 if can't be found
  */
-char* findBinaryForCommand(char* binary_name) {
+/*
+ * string-passing code adapted from accepted answer to SO question
+ * https://stackoverflow.com/questions/1496313/returning-c-string-from-a-function
+ */
+int findBinaryForCommand(char* binary_name, char* binary_fullpath, int buffersize) {
     // first check that binary_name is full path already
-    printf("binary_name: %s\n", binary_name);
-    char* binary_fullpath = "\0";
     FILE * fp = fopen(binary_name, "r");
     if (fp)
     {
-        memcpy(binary_fullpath, binary_name, strlen(binary_name) + 1);
+        //memcpy(binary_fullpath, binary_name, strlen(binary_name) + 1);
+        strncpy(binary_fullpath, binary_name, buffersize-1);
+        binary_fullpath[buffersize-1] = '\0';
         fclose(fp);
-        return binary_fullpath;
+        return 1;
     }
 
     // if binary_name hasn't supplied full path
@@ -70,27 +74,26 @@ char* findBinaryForCommand(char* binary_name) {
     char test_path[MAX_LEN_DIR_NAME];
     for (i = 0; i < _num_dirs; i++)
     {
-        printf("Am i here?\n");
         test_path[0] = '\0';
         strcat(test_path, _dirs[i]);
         strcat(test_path, "/");
         strcat(test_path, binary_name);
         strcat(test_path, "\0");
-        printf("Searching %s\n", test_path);
 
         fp = fopen(test_path, "r");
         if (fp) {
-            printf("Found it!\n");
             //memcpy(binary_fullpath, test_path, strlen(test_path) + 1);
             //strcat(binary_fullpath, test_path);
             //strcat(binary_fullpath, "\0");
-            binary_fullpath = test_path;
-            printf("%s\n", binary_fullpath);
+            //binary_fullpath = test_path;
+            strncpy(binary_fullpath, test_path, buffersize-1);
+            binary_fullpath[buffersize-1] = '\0';
             fclose(fp);
-            return binary_fullpath;
+            printf("binary_fullpath in findBinaryForCommand: %s\n", binary_fullpath);
+            return 1;
         }  
     }
-    return NULL;
+    return 0;
 }
 
 /*
@@ -160,27 +163,28 @@ int tokenizeInput(char** tokens, char* input) {
  * (not OR or PP)
  */
 /*
- * code for this function adapted from example given in Ch.1 of Doeppner
+ * code for this function adapted from example given in appendix_b.c
  */
 int exec_standard(char ** args, int num_tokens, char *binary_fullpath) {
 
     char* envp[] = {0};
-    short pid;
+    int pid;
+    int status;
     if ( (pid = fork()) == 0) {
         args[0] = binary_fullpath;
         args[num_tokens] = 0;
 
         if( execve(args[0], args, envp) == -1) {
             fprintf(stderr, "Failed to execute %s\n", args[0]);
-            exit(0);
+            //exit(0);
+            return 0;
         }
     }
     else {
-        int returnCode;
-        while (pid != wait(&returnCode));
+        while (wait(&status) > 0) {
+            return 1;
+        }
     }
-
-    return 1;
 }
 
 /*
@@ -195,6 +199,7 @@ int exec_standard(char ** args, int num_tokens, char *binary_fullpath) {
 
 int exec_or(char ** args, int num_tokens, char* binary_fullpath) {
     int i;
+    int status;
     for (i=0; i<num_tokens; i++) {
         if (strcmp(args[i], "->") == 0) {
             char* filename = args[i+1];
@@ -234,10 +239,10 @@ int exec_or(char ** args, int num_tokens, char* binary_fullpath) {
                 }
             }
             else {
-                int returnCode;
-                while (pid != wait(&returnCode));
-            }
-            return 1;    
+                while (wait(&status) > 0) {
+                    return 1;
+                }
+            }    
         }
     }
     fprintf(stderr, "Invalid command. Must include '->'\n" );
@@ -263,7 +268,6 @@ int exec_pipe() {
     char* envp[] = {0};
     char* command_head[] ={"/bin/ls", "-1", 0};
     char* command_tail[] = {"/usr/bin/wc", "-l", 0};
-    printf("I am in exec_pipe\n");
     // if (num_arrows == 2) {
     //     int fd2[2];
     //     int pid_3;
@@ -272,21 +276,19 @@ int exec_pipe() {
     pipe(fd1);
 
     if((pid_1 = fork()) == 0) {
-        printf("In 1\n");
         dup2(fd1[1], 1);
         close(fd1[0]);
         //commands[0][0] = *binary_fullpath;
         if (execve(command_head[0], command_head, envp) == -1) {
-            fprintf(stderr, "Error: failed to execute %s\n", command_head);
+            fprintf(stderr, "Error: failed to execute %s\n", *command_head);
         } 
     }
     if ((pid_2 = fork()) == 0) {
-	printf("In 2\n");
         dup2(fd1[0], 0);
         close(fd1[1]);
         //commands[1][0] = *binary_fullpath;
         if (execve(command_tail[0], command_tail, envp) == -1) {
-            fprintf(stderr, "Error: failed to execute %s\n", command_tail);
+            fprintf(stderr, "Error: failed to execute %s\n", *command_tail);
         }
     }
 
@@ -295,8 +297,6 @@ int exec_pipe() {
 
     waitpid(pid_1, &status, 0);
     waitpid(pid_2, &status, 0);
-
-    printf("Yeehaw!\n");
 
     return 1;
 }   
@@ -319,7 +319,6 @@ int do_command_voodoo(char* token[], int num_tokens, char* binary_fullpaths[3], 
     for (i = 0; i < num_tokens; i++) {
         if (strcmp(token[i], "->") == 0) {
             arrows_index[num_arrows] = i;
-            printf("arrows_index[%d]: %d\n", num_arrows, arrows_index[num_arrows] );
             ++num_arrows;
         }
     }
@@ -345,14 +344,13 @@ int do_command_voodoo(char* token[], int num_tokens, char* binary_fullpaths[3], 
         }
     }
     num_cmds++;
-    printf("num_cmds: %d\n", num_cmds);
     commands[num_cmds-1][m] = 0; // null-terminate final command[]
 
     if (num_cmds <= num_arrows) {
         fprintf(stderr, "Error: missing command.\n" );   /******* THIS ISN'T REACHED WHEN IT SHOULD BE ******/
         return 0;    
     }
-
+    /*
     for(i=0; i<3; i++) {
         printf("commands[%d]: ", i);
         int k;
@@ -361,10 +359,12 @@ int do_command_voodoo(char* token[], int num_tokens, char* binary_fullpaths[3], 
         }
         printf("\n");
     }
+    */
 
     for (i=0; i < num_cmds; i++) {
-        char* binary_fullpath = findBinaryForCommand(commands[i][0]);
-        if (binary_fullpath == NULL) {
+        char binary_fullpath[MAX_LEN_DIR_NAME];
+        findBinaryForCommand(commands[i][0], binary_fullpath, sizeof(binary_fullpath));
+        if (binary_fullpath == '\0') {
             fprintf(stderr, "Error: command '%s' not found.\n", commands[i][0]);
             return 0;
         }
@@ -381,7 +381,8 @@ int do_command_voodoo(char* token[], int num_tokens, char* binary_fullpaths[3], 
 void run_command(char* token[], int num_tokens) {
     if (strcmp(token[0], "OR") == 0) {
         char binary_fullpath[MAX_LEN_DIR_NAME];
-        memcpy(binary_fullpath, findBinaryForCommand(token[1]), strlen(findBinaryForCommand(token[1])) + 1);
+        //memcpy(binary_fullpath, findBinaryForCommand(token[1]), strlen(findBinaryForCommand(token[1])) + 1);
+        findBinaryForCommand(token[1], binary_fullpath, sizeof(binary_fullpath));
         if (strlen(binary_fullpath) > 0) {
             exec_or(token, num_tokens, binary_fullpath);
         }
@@ -390,7 +391,6 @@ void run_command(char* token[], int num_tokens) {
         }
     }
     else if (strcmp(token[0], "PP") == 0) {
-        printf("I am in here.\n");
         exec_pipe();
         /*
         char* commands[3][MAX_NUM_ARGS+1];
@@ -410,7 +410,8 @@ void run_command(char* token[], int num_tokens) {
     }
     else {
         char binary_fullpath[MAX_LEN_DIR_NAME];
-        memcpy(binary_fullpath, findBinaryForCommand(token[0]), strlen(findBinaryForCommand(token[0])) + 1);
+        findBinaryForCommand(token[0], binary_fullpath, sizeof(binary_fullpath));
+        printf("binary_fullpath: %s\n", binary_fullpath);
         if (strlen(binary_fullpath) > 0) { 
             exec_standard(token, num_tokens, binary_fullpath);
         }
