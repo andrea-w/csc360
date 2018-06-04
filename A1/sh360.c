@@ -475,20 +475,20 @@ int do_command_voodoo(char* token[], int num_tokens, char* commands[][MAX_NUM_AR
 
 void run_command(char* token[], int num_tokens) {
     if (strcmp(token[0], "OR") == 0) {
-        char binary_fullpath[MAX_LEN_DIR_NAME];
-        findBinaryForCommand(token[1], binary_fullpath, MAX_LEN_DIR_NAME);
-        printf("binary_fullpath: %s\n", binary_fullpath);
-        if (strlen(binary_fullpath) > 0) {
+        char binary_fullpath[MAX_LEN_DIR_NAME] = {0};
+        if (findBinaryForCommand(token[1], binary_fullpath, MAX_LEN_DIR_NAME) != 0) {
             exec_or(token, num_tokens, binary_fullpath);
         }
         else {
             fprintf(stderr, "Error: command '%s' not found.\n", token[1]);
+            return;
         }
     }
     else if (strcmp(token[0], "PP") == 0) {
         int num_arrows = count_arrows(token, num_tokens);
         if (num_arrows == 0) {
             fprintf(stderr, "Error: missing '->' symbol.\n");
+            return;
         }
 
         char* commands[num_arrows+1][MAX_NUM_ARGS+1];
@@ -497,8 +497,10 @@ void run_command(char* token[], int num_tokens) {
         int i;
         char binary_fullpaths[3][MAX_LEN_DIR_NAME];
         for (i=0; i<num_arrows+1; i++) {
-            findBinaryForCommand(commands[i][0], binary_fullpaths[i], MAX_LEN_DIR_NAME);
-            printf("binary_fullpaths[%d]: %s\n", i, binary_fullpaths[i]);
+            if (findBinaryForCommand(commands[i][0], binary_fullpaths[i], MAX_LEN_DIR_NAME) == 0) {
+                fprintf(stderr, "Error: command '%s' not found.\n", commands[i][0]);
+                return;
+            }
         }
         if (num_arrows == 1) {
             exec_pipe_2(commands[0], binary_fullpaths[0], commands[1], binary_fullpaths[1]);
@@ -508,14 +510,13 @@ void run_command(char* token[], int num_tokens) {
         }
     }
     else {
-        char binary_fullpath[MAX_LEN_DIR_NAME];
-        findBinaryForCommand(token[0], binary_fullpath, sizeof(binary_fullpath));
-        printf("binary_fullpath: %s\n", binary_fullpath);
-        if (strlen(binary_fullpath) > 0) { 
+        char binary_fullpath[MAX_LEN_DIR_NAME] = {0};
+        if (findBinaryForCommand(token[0], binary_fullpath, MAX_LEN_DIR_NAME) != 0) {
             exec_standard(token, num_tokens, binary_fullpath);
         }
         else {
             fprintf(stderr, "Error: command '%s' not found.\n", token[0]);
+            return;
         }
     } 
 } 
