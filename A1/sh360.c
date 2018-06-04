@@ -532,7 +532,10 @@ int main(int argc, char *argv[]) {
         fprintf(stdout, "%s ", _prompt);
         fflush(stdout);
         fgets(input, MAX_INPUT_LINE, stdin);
-        if (input[strlen(input) - 1] == '\n') {
+        if (strlen(input) < 2) {
+		continue;
+	}
+	if (input[strlen(input) - 1] == '\n') {
             input[strlen(input) - 1] = '\0';
         }
 
@@ -543,7 +546,8 @@ int main(int argc, char *argv[]) {
 
         char *token[30]; // 30 is approx. max number of tokens that could be input at once
         int num_tokens = tokenizeInput(token, input);
-
-        run_command(token, num_tokens);   
+	if (num_tokens > 0) {        
+            run_command(token, num_tokens);   
+        }
     }
 }
