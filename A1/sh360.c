@@ -48,6 +48,34 @@ void getCommandDirectories(FILE * fp) {
 }
 
 /*
+ * code adapted from appendix_f.c
+ */
+int check_for_file(char *filename, int permis) {
+    struct stat file_stat;
+
+    if (stat(filename, &file_stat) != 0) {
+        fprintf(stderr, "Error: '%s' either does not exist or cannot access file/directory.\n", filename);
+        return 0;
+    } else {
+        if (permis == 1) {
+            if (!(file_stat.st_mode & S_IXOTH)) {
+                fprintf(stderr, "Error: do not have execute permissions on file '%s'\n",  filename);
+                return 0;
+            }
+            return 1;    
+        }
+        else if (permis == 2) {
+            if (!file_stat.st_mode & S_IWOTH) {
+                fprintf(stderr, "Error: do not have write permissions on file '%s'\n",  filename);
+                return 0;
+            }
+            return 1;
+        }
+    }
+
+}
+
+/*
  * searches through directores in _dirs[] looking for binary matching
  * @param binary_name
  * returns 1 if successful, 0 if can't be found
@@ -110,7 +138,7 @@ int getCommandPrompt() {
     if (fp == NULL)
     {
         fprintf(stderr, "Error: cannot open file %s\n", CONFIG_FILENAME);
-        exit(1);
+        return 0;
     }
 
     while( (read = getline(&line, &len, fp)) != -1 ) {
@@ -166,11 +194,17 @@ int exec_standard(char ** args, int num_tokens, char *binary_fullpath) {
         args[0] = binary_fullpath;
         args[num_tokens] = 0;
 
+        if (check_for_file(args[0], 1) == 0) {
+            //return 0;
+            exit(EXIT_FAILURE);
+        }
+
         if( execve(args[0], args, envp) == -1) {
             fprintf(stderr, "Failed to execute %s\n", args[0]);
-            //exit(0);
-            return 0;
+            //return 0;
+            exit(EXIT_FAILURE);
         }
+        exit(EXIT_SUCCESS);
     }
     else {
         while (wait(&status) > 0) {
@@ -205,6 +239,9 @@ int exec_or(char ** args, int num_tokens, char* binary_fullpath) {
                 fprintf(stderr, "Error: could not open file %s\n", filename);
                 return 0;
             }
+            if (check_for_file(filename, 2) == 0) {
+                return 0;
+            }
 
             // manipulate args as necessary to pass to execve() 
             int j;
@@ -225,10 +262,14 @@ int exec_or(char ** args, int num_tokens, char* binary_fullpath) {
                 dup2(fd, 1);
                 dup2(fd, 2);
 
+                if (check_for_file(args[0], 1) == 0) {
+                    exit(EXIT_FAILURE);
+                }
                 if( execve(args[0], args, envp) == -1) {
                     fprintf(stderr, "Error: failed to execute command %s\n", args[1]);
-                    return 0;
+                    exit(EXIT_FAILURE);
                 }
+                exit(EXIT_SUCCESS);
             }
             else {
                 while (wait(&status) > 0) {
@@ -259,6 +300,11 @@ int exec_pipe_2(char ** command_head, char* binary_head, char** command_tail, ch
     char* envp[] = {0};
     command_head[0] = binary_head;
     command_tail[0] = binary_tail;
+
+    if ((check_for_file(command_head[0], 1) == 0) || (check_for_file(command_tail[0], 1) == 0)) {
+        return 0;
+    }
+
     pipe(fd1);
 
     if((pid_1 = fork()) == 0) {
@@ -266,14 +312,20 @@ int exec_pipe_2(char ** command_head, char* binary_head, char** command_tail, ch
         close(fd1[0]);
         if (execve(command_head[0], command_head, envp) == -1) {
             fprintf(stderr, "Error: failed to execute %s\n", *command_head);
-        } 
+            close(fd1[1]);
+            exit(EXIT_FAILURE);
+        }
+        exit(EXIT_SUCCESS); 
     }
     if ((pid_2 = fork()) == 0) {
         dup2(fd1[0], 0);
         close(fd1[1]);
         if (execve(command_tail[0], command_tail, envp) == -1) {
             fprintf(stderr, "Error: failed to execute %s\n", *command_tail);
+            close(fd1[0]);
+            exit(EXIT_FAILURE);
         }
+        exit(EXIT_SUCCESS);
     }
 
     close(fd1[0]);
@@ -294,6 +346,10 @@ int exec_pipe_3(char** command_head, char* binary_head, char** command_middle, c
     int pipe1[2], pipe2[2];
     char* envp[] = {0};
 
+    if ( (check_for_file(binary_head, 1) == 0) || (check_for_file(binary_middle, 1) == 0) || (check_for_file(binary_tail, 1) == 0) ) {
+        exit(EXIT_FAILURE);
+    }
+
     pipe(pipe1);
 
     if ((pid_1 = fork()) == 0) {
@@ -305,8 +361,10 @@ int exec_pipe_3(char** command_head, char* binary_head, char** command_middle, c
 
         if (execve(command_head[0], command_head, envp) == -1) {
             fprintf(stderr, "Error: failed to execute first command\n" );
-            exit(1);
+            close(pipe1[1]);
+            exit(EXIT_FAILURE);
         }
+        exit(EXIT_SUCCESS);
     }
 
     pipe(pipe2);
@@ -323,8 +381,13 @@ int exec_pipe_3(char** command_head, char* binary_head, char** command_middle, c
 
         if (execve(command_middle[0], command_middle, envp) == -1) {
             fprintf(stderr, "Error: failed to execute second command\n" );
-            exit(1);
+            close(pipe1[0]);
+            close(pipe1[1]);
+            close(pipe2[0]);
+            close(pipe2[1]);
+            exit(EXIT_FAILURE);
         }
+        exit(EXIT_SUCCESS);
     }
 
     close(pipe1[0]);
@@ -339,8 +402,13 @@ int exec_pipe_3(char** command_head, char* binary_head, char** command_middle, c
 
         if (execve(command_tail[0], command_tail, envp) == -1) {
             fprintf(stderr, "Error: failed to execute third command.\n" );
-            exit(1);
+            close(pipe1[0]);
+            close(pipe1[1]);
+            close(pipe2[0]);
+            close(pipe2[1]);
+            exit(EXIT_FAILURE);
         }
+        exit(EXIT_SUCCESS);
     }
 
     close(pipe1[0]);
@@ -408,7 +476,8 @@ int do_command_voodoo(char* token[], int num_tokens, char* commands[][MAX_NUM_AR
 void run_command(char* token[], int num_tokens) {
     if (strcmp(token[0], "OR") == 0) {
         char binary_fullpath[MAX_LEN_DIR_NAME];
-        findBinaryForCommand(token[1], binary_fullpath, sizeof(binary_fullpath));
+        findBinaryForCommand(token[1], binary_fullpath, MAX_LEN_DIR_NAME);
+        printf("binary_fullpath: %s\n", binary_fullpath);
         if (strlen(binary_fullpath) > 0) {
             exec_or(token, num_tokens, binary_fullpath);
         }
@@ -429,6 +498,7 @@ void run_command(char* token[], int num_tokens) {
         char binary_fullpaths[3][MAX_LEN_DIR_NAME];
         for (i=0; i<num_arrows+1; i++) {
             findBinaryForCommand(commands[i][0], binary_fullpaths[i], MAX_LEN_DIR_NAME);
+            printf("binary_fullpaths[%d]: %s\n", i, binary_fullpaths[i]);
         }
         if (num_arrows == 1) {
             exec_pipe_2(commands[0], binary_fullpaths[0], commands[1], binary_fullpaths[1]);
@@ -440,6 +510,7 @@ void run_command(char* token[], int num_tokens) {
     else {
         char binary_fullpath[MAX_LEN_DIR_NAME];
         findBinaryForCommand(token[0], binary_fullpath, sizeof(binary_fullpath));
+        printf("binary_fullpath: %s\n", binary_fullpath);
         if (strlen(binary_fullpath) > 0) { 
             exec_standard(token, num_tokens, binary_fullpath);
         }
@@ -466,7 +537,7 @@ int main(int argc, char *argv[]) {
 
         if (strcmp(input, "exit") == 0) {
             printf("Exiting...\n");
-            exit(0);
+            exit(EXIT_SUCCESS);
         }
 
         char *token[30]; // 30 is approx. max number of tokens that could be input at once
