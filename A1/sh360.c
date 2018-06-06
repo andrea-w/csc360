@@ -1,7 +1,7 @@
 /*
  * sh360.c
  * CSC 360, Summer 2018
- *
+ * Andrea Williams 
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -148,8 +148,8 @@ int getCommandPrompt() {
 
     if (fp == NULL)
     {
-        fprintf(stderr, "Error: cannot open file %s\n", CONFIG_FILENAME);
-        return 0;
+        fprintf(stderr, "Error: cannot open file %s. Exiting...\n", CONFIG_FILENAME);
+        exit(EXIT_FAILURE);
     }
 
     while( (read = getline(&line, &len, fp)) != -1 ) {
