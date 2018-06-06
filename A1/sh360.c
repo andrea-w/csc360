@@ -1,7 +1,7 @@
 /*
  * sh360.c
  * CSC 360, Summer 2018
- *
+ * Andrea Williams | V00511127
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,22 +11,32 @@
 #include <fcntl.h>
 #include <stdbool.h>
 
-/*
- * define global variables
- */
+/**************************** CONSTANTS ***********************************/
 #define MAX_NUM_ARGS 7
 #define MAX_INPUT_LINE 80
 #define MAX_LEN_PROMPT 10
 #define MAX_NUM_DIRS 10
-#define CONFIG_FILENAME "./.uvshrc"
+#define CONFIG_FILENAME "./.sh360rc"
 #define MAX_LEN_DIR_NAME 200 //chosen arbitrarily
 
-/*
- * initialize other global variables
- */
+/**************************** GLOBAL VARIABLES ******************************/
 int _num_dirs = 0; // number of directories listed in config file; i.e. number of entries in _dirs[]
 char _dirs[MAX_NUM_DIRS][MAX_LEN_DIR_NAME]; // array of directories listed in config file
 char _prompt[MAX_LEN_PROMPT]; // string to be displayed for each command prompt
+
+/**************************** FUNCTION PROTOTYPES **************************/
+void getCommandDirectories(FILE * fp);
+int check_for_file(char* filename, int permis);
+int findBinaryForCommand(char* binary_name, char* binary_fullpath, int buffersize);
+int getCommandPrompt();
+int tokenizeInput(char** tokens, char* input);
+int exec_standard(char ** args, int num_tokens, char *binary_fullpath);
+int exec_or(char ** args, int num_tokens, char* binary_fullpath);
+int exec_pipe_2(char ** command_head, char* binary_head, char** command_tail, char* binary_tail);
+int exec_pipe_3(char** command_head, char* binary_head, char** command_middle, char* binary_middle, char** command_tail, char* binary_tail);
+int count_arrows(char* token[], int num_tokens);
+int prep_cmd_for_piping(char* token[], int num_tokens, char* commands[][MAX_NUM_ARGS+1], int num_arrows);
+void run_command(char* token[], int num_tokens);
 
 /*
  * reads remaining lines (other than first line) of config file
@@ -42,12 +52,16 @@ void getCommandDirectories(FILE * fp) {
     for (i = 0; i < _num_dirs; i++)
     {
         if (_dirs[i][strlen(_dirs[i])-1]) {
+            printf("_dirs[%d]: %s\n", i, _dirs[i]);
             _dirs[i][strlen(_dirs[i])-1] = 0; // remove newline character if it exists
         }
     }
 }
 
 /*
+ * int permis: if == 1, check for permission to execute
+ * if permis == 2, check for permission to write
+ * 
  * code adapted from appendix_f.c
  */
 int check_for_file(char *filename, int permis) {
@@ -79,8 +93,7 @@ int check_for_file(char *filename, int permis) {
  * searches through directores in _dirs[] looking for binary matching
  * @param binary_name
  * returns 1 if successful, 0 if can't be found
- */
-/*
+ *
  * string-passing code adapted from accepted answer to SO question
  * https://stackoverflow.com/questions/1496313/returning-c-string-from-a-function
  */
@@ -119,8 +132,7 @@ int findBinaryForCommand(char* binary_name, char* binary_fullpath, int buffersiz
 /*
  * reads first line of .sh360rc file to get string 
  * to be used as command prompt
- */
-/*
+ *
  * this function has been adapted from code given as example in
  * https://www.tutorialspoint.com/c_standard_library/c_function_fopen.htm
  * and from example in 
@@ -181,8 +193,7 @@ int tokenizeInput(char** tokens, char* input) {
 /*
  * spawn a child process and execute a "standard" binary command
  * (not OR or PP)
- */
-/*
+ *
  * code for this function adapted from example given in appendix_b.c
  */
 int exec_standard(char ** args, int num_tokens, char *binary_fullpath) {
@@ -195,13 +206,11 @@ int exec_standard(char ** args, int num_tokens, char *binary_fullpath) {
         args[num_tokens] = 0;
 
         if (check_for_file(args[0], 1) == 0) {
-            //return 0;
             exit(EXIT_FAILURE);
         }
 
         if( execve(args[0], args, envp) == -1) {
             fprintf(stderr, "Failed to execute %s\n", args[0]);
-            //return 0;
             exit(EXIT_FAILURE);
         }
         exit(EXIT_SUCCESS);
@@ -218,8 +227,7 @@ int exec_standard(char ** args, int num_tokens, char *binary_fullpath) {
  * then manipulate tokens as needed to find filename & command (with args)
  * then spawn child process
  * then execute command
- */
-/*
+ *
  * code adapted from appendix_c.c
  */
 
@@ -284,12 +292,13 @@ int exec_or(char ** args, int num_tokens, char* binary_fullpath) {
 
 
 /*
+ * performs 2-command (one pipe) piping 
+ *
  * first do input validation
  * then manipulate tokens as needed to break down commands
  * then spawn child process
  * then execute command(s)
- */
-/*
+ *
  * code adapted from appendix_d.c
  */
 int exec_pipe_2(char ** command_head, char* binary_head, char** command_tail, char* binary_tail) {
@@ -338,6 +347,8 @@ int exec_pipe_2(char ** command_head, char* binary_head, char** command_tail, ch
 } 
 
 /*
+ * performs 3-command (2 pipes) piping
+ *
  * code adapted from https://gist.github.com/mplewis/5279108
  */
 int exec_pipe_3(char** command_head, char* binary_head, char** command_middle, char* binary_middle, char** command_tail, char* binary_tail) {
@@ -434,7 +445,12 @@ int count_arrows(char* token[], int num_tokens) {
     return num_arrows;
 }  
 
-int do_command_voodoo(char* token[], int num_tokens, char* commands[][MAX_NUM_ARGS+1], int num_arrows) {
+/*
+ * helper function for piping:
+ * organize token[] array into 2D matrix of command strings, where each row of matrix is command and args
+ * representing one step of the piping operation
+ */
+int prep_cmd_for_piping(char* token[], int num_tokens, char* commands[][MAX_NUM_ARGS+1], int num_arrows) {
     int arrows_index[num_arrows+1];
     int i;
     int a;
@@ -473,6 +489,9 @@ int do_command_voodoo(char* token[], int num_tokens, char* commands[][MAX_NUM_AR
     return 1;
 }
 
+/*
+ * parses first token in input to determine which function should be called
+ */
 void run_command(char* token[], int num_tokens) {
     if (strcmp(token[0], "OR") == 0) {
         char binary_fullpath[MAX_LEN_DIR_NAME] = {0};
@@ -492,7 +511,7 @@ void run_command(char* token[], int num_tokens) {
         }
 
         char* commands[num_arrows+1][MAX_NUM_ARGS+1];
-        do_command_voodoo(token, num_tokens, commands, num_arrows);
+        prep_cmd_for_piping(token, num_tokens, commands, num_arrows);
         
         int i;
         char binary_fullpaths[3][MAX_LEN_DIR_NAME];
@@ -532,7 +551,10 @@ int main(int argc, char *argv[]) {
         fprintf(stdout, "%s ", _prompt);
         fflush(stdout);
         fgets(input, MAX_INPUT_LINE, stdin);
-        if (input[strlen(input) - 1] == '\n') {
+        if (strlen(input) < 2) {
+        continue;
+    }
+    if (input[strlen(input) - 1] == '\n') {
             input[strlen(input) - 1] = '\0';
         }
 
@@ -543,7 +565,8 @@ int main(int argc, char *argv[]) {
 
         char *token[30]; // 30 is approx. max number of tokens that could be input at once
         int num_tokens = tokenizeInput(token, input);
-
-        run_command(token, num_tokens);   
+    if (num_tokens > 0) {        
+            run_command(token, num_tokens);   
+        }
     }
 }
