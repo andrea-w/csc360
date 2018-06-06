@@ -1,7 +1,7 @@
 /*
  * sh360.c
  * CSC 360, Summer 2018
- * Andrea Williams | V00511127
+ *
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -52,7 +52,6 @@ void getCommandDirectories(FILE * fp) {
     for (i = 0; i < _num_dirs; i++)
     {
         if (_dirs[i][strlen(_dirs[i])-1]) {
-            printf("_dirs[%d]: %s\n", i, _dirs[i]);
             _dirs[i][strlen(_dirs[i])-1] = 0; // remove newline character if it exists
         }
     }
@@ -171,8 +170,7 @@ int getCommandPrompt() {
 
 /*
  * break user inputted string up into tokens, delimited by space
- */
-/*
+ *
  * code adapted from appendix_e.c
  */
 int tokenizeInput(char** tokens, char* input) {
@@ -211,6 +209,7 @@ int exec_standard(char ** args, int num_tokens, char *binary_fullpath) {
 
         if( execve(args[0], args, envp) == -1) {
             fprintf(stderr, "Failed to execute %s\n", args[0]);
+            //return 0;
             exit(EXIT_FAILURE);
         }
         exit(EXIT_SUCCESS);
@@ -552,12 +551,11 @@ int main(int argc, char *argv[]) {
         fflush(stdout);
         fgets(input, MAX_INPUT_LINE, stdin);
         if (strlen(input) < 2) {
-        continue;
-    }
-    if (input[strlen(input) - 1] == '\n') {
+		    continue;
+	    }
+	    if (input[strlen(input) - 1] == '\n') {
             input[strlen(input) - 1] = '\0';
         }
-
         if (strcmp(input, "exit") == 0) {
             printf("Exiting...\n");
             exit(EXIT_SUCCESS);
@@ -565,7 +563,7 @@ int main(int argc, char *argv[]) {
 
         char *token[30]; // 30 is approx. max number of tokens that could be input at once
         int num_tokens = tokenizeInput(token, input);
-    if (num_tokens > 0) {        
+	    if (num_tokens > 0) {        
             run_command(token, num_tokens);   
         }
     }
