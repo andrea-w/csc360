@@ -14,9 +14,10 @@ import subprocess
 import numpy
 import re
 import matplotlib.pyplot as plt
+import math
 
 # args to ./simgen
-num_tasks = "1000"
+num_tasks = "2000"
 seed = "1127"
 
 min_request = 99999999999.0
@@ -35,6 +36,11 @@ for out in iter(simgen.stdout.readline, ''):
         if (request > max_request):
             max_request = request
 avg_request = total_request / float(num_tasks)
+
+# round values up to nearest whole number
+avg_request = math.ceil(avg_request)
+min_request = math.ceil(min_request)
+max_request = math.ceil(max_request)
 
 # variables for quantum lengths and dispatch costs, as specified in assignment
 quantum_len = ["50", "100", "250", "500", str(min_request), str(max_request), str(avg_request)]

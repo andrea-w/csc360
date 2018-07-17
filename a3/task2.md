@@ -11,3 +11,8 @@ The script's algorithm is as follows:
     4. Once all 24 simulations have been run and analyzed, task2.py plots the average wait and turnaround times based on the values stored in the 2 matrices. Plotting is done using the matplotlib.pyplot library. 
 
 As a safety measure, the task2.py script checks at the end of each simulation that all 1000 tasks have been analyzed and accounted for in the sum of wait and turnaround times. If for some reason the number of tasks analyzed does not equal 1000, the script exits with an appropriate error message.
+
+To run the task2.py script, from the terminal, type
+python task2.py
+
+Note that the "task2.py" script is compatible with Python 2.7, but works only inconsistently with Python3.
